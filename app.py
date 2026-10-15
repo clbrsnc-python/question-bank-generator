@@ -29,8 +29,17 @@ if "generated_questions" not in st.session_state:
 st.sidebar.title("⚙️ Setup & Credentials")
 api_key = st.sidebar.text_input("Gemini API Key", type="password", value=os.environ.get("GEMINI_API_KEY", ""))
 
+st.sidebar.markdown("""
+---
+### 🔑 How to get your API key:
+1. Go to **[Google AI Studio](https://aistudio.google.com/app/apikey)**
+2. Sign in with your Google account.
+3. Click **Create API key** (Free tier included).
+4. Copy and paste your key in the box above!
+""")
+
 if not api_key:
-    st.sidebar.warning("Please enter your Gemini API Key to continue.")
+    st.sidebar.warning("Please enter your Gemini API Key above to continue.")
 
 st.title("🎓 AI Question Bank Generator for Subject Teachers")
 st.caption("Generate syllabus-bounded, PYQ-calibrated question pools without hallucinations.")

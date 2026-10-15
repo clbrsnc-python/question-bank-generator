@@ -34,7 +34,7 @@ def analyze_pyqs(raw_text: str, subject_name: str, api_key: str) -> dict:
     """
     
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-2.0-flash",
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",

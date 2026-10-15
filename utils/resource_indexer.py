@@ -42,7 +42,7 @@ def index_learning_resources(raw_resource_text: str, syllabus_tree: dict, api_ke
     """
     
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-2.0-flash",
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
