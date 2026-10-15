@@ -7,7 +7,10 @@ def index_learning_resources(raw_resource_text: str, syllabus_tree: dict, api_ke
     Chunks learning resource text and tags passages strictly to topics in the syllabus_tree.
     Filters out any out-of-syllabus material.
     """
-    client = genai.Client(api_key=api_key)
+    if not api_key:
+        raise ValueError("Gemini API Key is missing. Please provide a valid key in the sidebar.")
+
+    client = genai.Client(api_key=api_key.strip())
     
     # Extract list of valid chapters and topics for explicit prompting
     valid_topics = []
@@ -41,14 +44,21 @@ def index_learning_resources(raw_resource_text: str, syllabus_tree: dict, api_ke
     Output strictly valid JSON.
     """
     
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            temperature=0.1
-        )
-    )
+    response = None
+    for model_name in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.1
+                )
+            )
+            break
+        except Exception as e:
+            if model_name == "gemini-1.5-flash":
+                raise e
     
     try:
         indexed_content = json.loads(response.text)

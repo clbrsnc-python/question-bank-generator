@@ -7,7 +7,10 @@ def analyze_pyqs(raw_text: str, subject_name: str, api_key: str) -> dict:
     Analyzes sample Previous Year Questions (PYQs) to create an Exam Calibration Profile
     capturing question styles, difficulty benchmarks, and Bloom's taxonomy breakdown.
     """
-    client = genai.Client(api_key=api_key)
+    if not api_key:
+        raise ValueError("Gemini API Key is missing. Please provide a valid key in the sidebar.")
+
+    client = genai.Client(api_key=api_key.strip())
     
     prompt = f"""
     You are an educational assessment expert analyzing Previous Year Questions (PYQs) for {subject_name}.
@@ -33,14 +36,21 @@ def analyze_pyqs(raw_text: str, subject_name: str, api_key: str) -> dict:
     Output strictly valid JSON matching the schema above.
     """
     
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            temperature=0.2
-        )
-    )
+    response = None
+    for model_name in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.2
+                )
+            )
+            break
+        except Exception as e:
+            if model_name == "gemini-1.5-flash":
+                raise e
     
     try:
         profile = json.loads(response.text)

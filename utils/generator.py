@@ -15,7 +15,10 @@ def generate_question_bank(
     Generates a calibrated question bank bounded strictly by the syllabus and
     matching the PYQ difficulty and style profile.
     """
-    client = genai.Client(api_key=api_key)
+    if not api_key:
+        raise ValueError("Gemini API Key is missing. Please provide a valid key in the sidebar.")
+
+    client = genai.Client(api_key=api_key.strip())
     
     prompt = f"""
     You are an expert subject matter examiner. Generate a high-quality Question Bank of EXACTLY {num_questions} questions.
@@ -58,14 +61,21 @@ def generate_question_bank(
     Generate EXACTLY {num_questions} questions now.
     """
     
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            temperature=0.3
-        )
-    )
+    response = None
+    for model_name in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.3
+                )
+            )
+            break
+        except Exception as e:
+            if model_name == "gemini-1.5-flash":
+                raise e
     
     try:
         questions = json.loads(response.text)
