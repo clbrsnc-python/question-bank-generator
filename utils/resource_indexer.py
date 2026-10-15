@@ -2,12 +2,15 @@ import json
 from google import genai
 from google.genai import types
 
+CANDIDATE_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+
 def index_learning_resources(raw_resource_text: str, syllabus_tree: dict, api_key: str) -> dict:
     """
     Chunks learning resource text and tags passages strictly to topics in the syllabus_tree.
     Filters out any out-of-syllabus material.
     """
-    client = genai.Client(api_key=api_key.strip())
+    clean_key = api_key.strip().strip('"').strip("'")
+    client = genai.Client(api_key=clean_key)
     
     # Extract list of valid chapters and topics for explicit prompting
     valid_topics = []
@@ -41,10 +44,9 @@ def index_learning_resources(raw_resource_text: str, syllabus_tree: dict, api_ke
     Output strictly valid JSON.
     """
     
-    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash"]
-    last_error = None
-    
-    for model_name in models_to_try:
+    response = None
+    last_err = None
+    for model_name in CANDIDATE_MODELS:
         try:
             response = client.models.generate_content(
                 model=model_name,
@@ -54,12 +56,19 @@ def index_learning_resources(raw_resource_text: str, syllabus_tree: dict, api_ke
                     temperature=0.1
                 )
             )
-            indexed_content = json.loads(response.text)
-            return indexed_content
+            if response and response.text:
+                break
         except Exception as e:
-            last_error = e
+            last_err = e
             continue
             
-    # Fallback: simple text blob under first chapter
-    ch_name = syllabus_tree.get("chapters", [{}])[0].get("chapter_name", "General Scope")
-    return {ch_name: [raw_resource_text[:3000]]}
+    if response is None or not response.text:
+        raise RuntimeError(f"Gemini API error during resource indexing: {str(last_err)}")
+    
+    try:
+        indexed_content = json.loads(response.text)
+        return indexed_content
+    except Exception as e:
+        # Fallback: simple text blob under first chapter
+        ch_name = syllabus_tree.get("chapters", [{}])[0].get("chapter_name", "General")
+        return {ch_name: [raw_resource_text[:3000]]}

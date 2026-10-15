@@ -4,6 +4,8 @@ from pypdf import PdfReader
 from google import genai
 from google.genai import types
 
+CANDIDATE_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+
 def extract_text_from_file(file_path_or_bytes, filename: str) -> str:
     """Extract raw text from PDF or TXT upload."""
     if filename.endswith(".pdf"):
@@ -24,7 +26,8 @@ def parse_syllabus(raw_text: str, subject_name: str, api_key: str) -> dict:
     Parses raw syllabus text into a structured JSON boundary tree containing
     chapters, topics, subtopics, and explicit exclusions.
     """
-    client = genai.Client(api_key=api_key.strip())
+    clean_key = api_key.strip().strip('"').strip("'")
+    client = genai.Client(api_key=clean_key)
     
     prompt = f"""
     You are an expert curriculum design assistant. Analyze the following raw syllabus text for the subject "{subject_name}".
@@ -51,10 +54,9 @@ def parse_syllabus(raw_text: str, subject_name: str, api_key: str) -> dict:
     Output strictly valid JSON matching the schema above.
     """
     
-    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash"]
-    last_error = None
-    
-    for model_name in models_to_try:
+    response = None
+    last_err = None
+    for model_name in CANDIDATE_MODELS:
         try:
             response = client.models.generate_content(
                 model=model_name,
@@ -64,10 +66,21 @@ def parse_syllabus(raw_text: str, subject_name: str, api_key: str) -> dict:
                     temperature=0.2
                 )
             )
-            parsed_json = json.loads(response.text)
-            return parsed_json
+            if response and response.text:
+                break
         except Exception as e:
-            last_error = e
+            last_err = e
             continue
             
-    raise RuntimeError(f"Gemini API Call failed: {str(last_error)}")
+    if response is None or not response.text:
+        raise RuntimeError(f"Gemini API error during syllabus parsing: {str(last_err)}")
+    
+    try:
+        parsed_json = json.loads(response.text)
+        return parsed_json
+    except Exception as e:
+        return {
+            "subject": subject_name,
+            "chapters": [{"chapter_id": "CH1", "chapter_name": "General Scope", "topics": ["All Topics"], "key_concepts": [], "explicit_exclusions": []}],
+            "error": f"Parsing failed: {str(e)}"
+        }

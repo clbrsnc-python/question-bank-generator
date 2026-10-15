@@ -2,12 +2,15 @@ import json
 from google import genai
 from google.genai import types
 
+CANDIDATE_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+
 def analyze_pyqs(raw_text: str, subject_name: str, api_key: str) -> dict:
     """
     Analyzes sample Previous Year Questions (PYQs) to create an Exam Calibration Profile
     capturing question styles, difficulty benchmarks, and Bloom's taxonomy breakdown.
     """
-    client = genai.Client(api_key=api_key.strip())
+    clean_key = api_key.strip().strip('"').strip("'")
+    client = genai.Client(api_key=clean_key)
     
     prompt = f"""
     You are an educational assessment expert analyzing Previous Year Questions (PYQs) for {subject_name}.
@@ -33,10 +36,9 @@ def analyze_pyqs(raw_text: str, subject_name: str, api_key: str) -> dict:
     Output strictly valid JSON matching the schema above.
     """
     
-    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash"]
-    last_error = None
-    
-    for model_name in models_to_try:
+    response = None
+    last_err = None
+    for model_name in CANDIDATE_MODELS:
         try:
             response = client.models.generate_content(
                 model=model_name,
@@ -46,17 +48,23 @@ def analyze_pyqs(raw_text: str, subject_name: str, api_key: str) -> dict:
                     temperature=0.2
                 )
             )
-            profile = json.loads(response.text)
-            return profile
+            if response and response.text:
+                break
         except Exception as e:
-            last_error = e
+            last_err = e
             continue
             
-    return {
-        "difficulty_benchmark": "Medium",
-        "blooms_taxonomy_distribution": {"recall_knowledge_pct": 40, "application_numerical_pct": 40, "analysis_synthesis_pct": 20},
-        "question_stem_style": "Standard academic questions",
-        "distractor_patterns": "Plausible misconceptions",
-        "typical_question_types": ["MCQ", "Short Answer"],
-        "error": f"Notice: PYQ analysis used fallback due to API error ({str(last_error)})"
-    }
+    if response is None or not response.text:
+        raise RuntimeError(f"Gemini API error during PYQ analysis: {str(last_err)}")
+    
+    try:
+        profile = json.loads(response.text)
+        return profile
+    except Exception as e:
+        return {
+            "difficulty_benchmark": "Medium",
+            "blooms_taxonomy_distribution": {"recall_knowledge_pct": 40, "application_numerical_pct": 40, "analysis_synthesis_pct": 20},
+            "question_stem_style": "Standard academic questions",
+            "distractor_patterns": "Plausible misconceptions",
+            "typical_question_types": ["MCQ", "Short Answer"]
+        }
