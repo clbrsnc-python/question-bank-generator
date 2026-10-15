@@ -7,9 +7,6 @@ def index_learning_resources(raw_resource_text: str, syllabus_tree: dict, api_ke
     Chunks learning resource text and tags passages strictly to topics in the syllabus_tree.
     Filters out any out-of-syllabus material.
     """
-    if not api_key:
-        raise ValueError("Gemini API Key is missing. Please provide a valid key in the sidebar.")
-
     client = genai.Client(api_key=api_key.strip())
     
     # Extract list of valid chapters and topics for explicit prompting
@@ -44,8 +41,10 @@ def index_learning_resources(raw_resource_text: str, syllabus_tree: dict, api_ke
     Output strictly valid JSON.
     """
     
-    response = None
-    for model_name in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash"]
+    last_error = None
+    
+    for model_name in models_to_try:
         try:
             response = client.models.generate_content(
                 model=model_name,
@@ -55,15 +54,12 @@ def index_learning_resources(raw_resource_text: str, syllabus_tree: dict, api_ke
                     temperature=0.1
                 )
             )
-            break
+            indexed_content = json.loads(response.text)
+            return indexed_content
         except Exception as e:
-            if model_name == "gemini-1.5-flash":
-                raise e
-    
-    try:
-        indexed_content = json.loads(response.text)
-        return indexed_content
-    except Exception as e:
-        # Fallback: simple text blob under first chapter
-        ch_name = syllabus_tree.get("chapters", [{}])[0].get("chapter_name", "General")
-        return {ch_name: [raw_resource_text[:3000]]}
+            last_error = e
+            continue
+            
+    # Fallback: simple text blob under first chapter
+    ch_name = syllabus_tree.get("chapters", [{}])[0].get("chapter_name", "General Scope")
+    return {ch_name: [raw_resource_text[:3000]]}

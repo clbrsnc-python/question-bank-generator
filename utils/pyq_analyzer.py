@@ -7,9 +7,6 @@ def analyze_pyqs(raw_text: str, subject_name: str, api_key: str) -> dict:
     Analyzes sample Previous Year Questions (PYQs) to create an Exam Calibration Profile
     capturing question styles, difficulty benchmarks, and Bloom's taxonomy breakdown.
     """
-    if not api_key:
-        raise ValueError("Gemini API Key is missing. Please provide a valid key in the sidebar.")
-
     client = genai.Client(api_key=api_key.strip())
     
     prompt = f"""
@@ -36,8 +33,10 @@ def analyze_pyqs(raw_text: str, subject_name: str, api_key: str) -> dict:
     Output strictly valid JSON matching the schema above.
     """
     
-    response = None
-    for model_name in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash"]
+    last_error = None
+    
+    for model_name in models_to_try:
         try:
             response = client.models.generate_content(
                 model=model_name,
@@ -47,19 +46,17 @@ def analyze_pyqs(raw_text: str, subject_name: str, api_key: str) -> dict:
                     temperature=0.2
                 )
             )
-            break
+            profile = json.loads(response.text)
+            return profile
         except Exception as e:
-            if model_name == "gemini-1.5-flash":
-                raise e
-    
-    try:
-        profile = json.loads(response.text)
-        return profile
-    except Exception as e:
-        return {
-            "difficulty_benchmark": "Medium",
-            "blooms_taxonomy_distribution": {"recall_knowledge_pct": 40, "application_numerical_pct": 40, "analysis_synthesis_pct": 20},
-            "question_stem_style": "Standard academic questions",
-            "distractor_patterns": "Plausible misconceptions",
-            "typical_question_types": ["MCQ", "Short Answer"]
-        }
+            last_error = e
+            continue
+            
+    return {
+        "difficulty_benchmark": "Medium",
+        "blooms_taxonomy_distribution": {"recall_knowledge_pct": 40, "application_numerical_pct": 40, "analysis_synthesis_pct": 20},
+        "question_stem_style": "Standard academic questions",
+        "distractor_patterns": "Plausible misconceptions",
+        "typical_question_types": ["MCQ", "Short Answer"],
+        "error": f"Notice: PYQ analysis used fallback due to API error ({str(last_error)})"
+    }

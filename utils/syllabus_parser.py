@@ -24,9 +24,6 @@ def parse_syllabus(raw_text: str, subject_name: str, api_key: str) -> dict:
     Parses raw syllabus text into a structured JSON boundary tree containing
     chapters, topics, subtopics, and explicit exclusions.
     """
-    if not api_key:
-        raise ValueError("Gemini API Key is missing. Please provide a valid key in the sidebar.")
-
     client = genai.Client(api_key=api_key.strip())
     
     prompt = f"""
@@ -54,9 +51,10 @@ def parse_syllabus(raw_text: str, subject_name: str, api_key: str) -> dict:
     Output strictly valid JSON matching the schema above.
     """
     
-    # Try gemini-2.0-flash first, fallback to gemini-1.5-flash
-    response = None
-    for model_name in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash"]
+    last_error = None
+    
+    for model_name in models_to_try:
         try:
             response = client.models.generate_content(
                 model=model_name,
@@ -66,20 +64,10 @@ def parse_syllabus(raw_text: str, subject_name: str, api_key: str) -> dict:
                     temperature=0.2
                 )
             )
-            break
+            parsed_json = json.loads(response.text)
+            return parsed_json
         except Exception as e:
-            if model_name == "gemini-1.5-flash":
-                raise e
-
-    if not response or not response.text:
-        raise ValueError("Received empty response from Gemini API.")
-    
-    try:
-        parsed_json = json.loads(response.text)
-        return parsed_json
-    except Exception as e:
-        return {
-            "subject": subject_name,
-            "chapters": [{"chapter_id": "CH1", "chapter_name": "General Scope", "topics": ["All Topics"], "key_concepts": [], "explicit_exclusions": []}],
-            "error": f"Parsing failed: {str(e)}"
-        }
+            last_error = e
+            continue
+            
+    raise RuntimeError(f"Gemini API Call failed: {str(last_error)}")

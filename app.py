@@ -25,38 +25,29 @@ if "indexed_resources" not in st.session_state:
 if "generated_questions" not in st.session_state:
     st.session_state.generated_questions = []
 
-# Helper to retrieve API key safely from Streamlit Secrets or Environment
-def get_default_api_key():
-    try:
-        if "GEMINI_API_KEY" in st.secrets:
-            return st.secrets["GEMINI_API_KEY"]
-    except Exception:
-        pass
-    return os.environ.get("GEMINI_API_KEY", "")
-
-default_key = get_default_api_key()
+# Fetch default API Key from Secrets or Environment
+default_api_key = ""
+if "GEMINI_API_KEY" in st.secrets:
+    default_api_key = st.secrets["GEMINI_API_KEY"]
+elif os.environ.get("GEMINI_API_KEY"):
+    default_api_key = os.environ.get("GEMINI_API_KEY")
 
 # Sidebar API Key configuration
-st.sidebar.title("⚙️ Setup & Credentials")
-api_key = st.sidebar.text_input("Gemini API Key", type="password", value=default_key).strip()
-
+st.sidebar.title("⚙️ Setup & API Key")
 st.sidebar.markdown("""
----
-### 🔑 How teachers can get a Free API Key:
-1. Go to **[aistudio.google.com](https://aistudio.google.com)**
-2. Sign in with any Google Account.
-3. Click **Get API key** ➔ **Create API key**.
-4. Copy your key and paste it above!
+Teachers can enter their own free API key below.
+Get a free key in 30 seconds at [Google AI Studio](https://aistudio.google.com).
 """)
 
+api_key = st.sidebar.text_input("Gemini API Key", type="password", value=default_api_key)
+
 if not api_key:
-    st.sidebar.warning("⚠️ Please enter a valid Gemini API Key in the sidebar or Streamlit Secrets to proceed.")
+    st.sidebar.warning("⚠️ Please enter a Gemini API Key to run the generator.")
 
 st.title("🎓 AI Question Bank Generator for Subject Teachers")
 st.caption("Generate syllabus-bounded, PYQ-calibrated question pools without hallucinations.")
 
 # Progress bar / Steps UI
-steps = ["1. Subject & Syllabus", "2. PYQ Calibration", "3. Resources Grounding", "4. Generation & Export"]
 st.progress((st.session_state.stage) / 4)
 
 # ----------------------------------------------------
@@ -68,19 +59,23 @@ if st.session_state.stage == 1:
     syllabus_file = st.file_uploader("Upload Syllabus (PDF or TXT)", type=["pdf", "txt"])
     
     if st.button("Process Syllabus ➡️", disabled=not (syllabus_file and api_key)):
-        with st.spinner("Extracting & parsing syllabus hierarchy..."):
+        with st.spinner("Extracting & parsing syllabus hierarchy via Gemini AI..."):
             try:
                 raw_syllabus = extract_text_from_file(syllabus_file, syllabus_file.name)
                 tree = parse_syllabus(raw_syllabus, subject_name, api_key)
-                if "error" in tree and len(tree.get("chapters", [])) <= 1:
-                    st.warning(f"Note during syllabus parsing: {tree['error']}")
                 st.session_state.syllabus_tree = tree
                 st.session_state.subject_name = subject_name
                 st.session_state.stage = 2
                 st.rerun()
             except Exception as e:
-                st.error(f"❌ Gemini API Error during processing: {str(e)}")
-                st.info("💡 Tip: Verify your Gemini API key in the sidebar or create a new key at aistudio.google.com")
+                st.error("⚠️ **API Authentication / Verification Error**")
+                st.error(f"Details: {str(e)}")
+                st.info("""
+                **How to resolve this:**
+                1. Make sure your API key was created at **[aistudio.google.com](https://aistudio.google.com)**.
+                2. Click **"Get API key"** ➔ **"Create API key in new project"**.
+                3. Copy and paste the key string carefully into the sidebar box without extra spaces or quotes.
+                """)
 
 # ----------------------------------------------------
 # STAGE 2: PYQ Calibration
@@ -102,14 +97,10 @@ elif st.session_state.stage == 2:
                     st.session_state.stage = 3
                     st.rerun()
                 except Exception as e:
-                    st.error(f"❌ Gemini API Error during PYQ analysis: {str(e)}")
+                    st.error(f"Error analyzing PYQs: {str(e)}")
     with col2:
         if st.button("Skip PYQs (Use Default Calibration) ➡️"):
-            st.session_state.pyq_profile = {
-                "difficulty_benchmark": "Medium",
-                "question_stem_style": "Standard academic questions",
-                "distractor_patterns": "Standard conceptual misconceptions"
-            }
+            st.session_state.pyq_profile = {"difficulty_benchmark": "Medium", "question_stem_style": "Standard", "distractor_patterns": "Standard conceptual misconceptions"}
             st.session_state.stage = 3
             st.rerun()
 
@@ -137,7 +128,7 @@ elif st.session_state.stage == 3:
                 st.session_state.stage = 4
                 st.rerun()
             except Exception as e:
-                st.error(f"❌ Gemini API Error during resource indexing: {str(e)}")
+                st.error(f"Error mapping resources: {str(e)}")
 
 # ----------------------------------------------------
 # STAGE 4: Question Generation & Export
@@ -163,14 +154,14 @@ elif st.session_state.stage == 4:
                         question_types=q_types,
                         selected_chapters=selected_ch,
                         syllabus_tree=st.session_state.syllabus_tree,
-                        pyq_profile=st.session_state.pyq_profile or {},
-                        indexed_resources=st.session_state.indexed_resources or {},
+                        pyq_profile=st.session_state.pyq_profile,
+                        indexed_resources=st.session_state.indexed_resources,
                         api_key=api_key
                     )
                     st.session_state.generated_questions = questions
                     st.success(f"Generated {len(questions)} questions successfully!")
                 except Exception as e:
-                    st.error(f"❌ Gemini API Error during question generation: {str(e)}")
+                    st.error(f"Error generating questions: {str(e)}")
     
     with col2:
         st.subheader("Preview & Export Question Pool")

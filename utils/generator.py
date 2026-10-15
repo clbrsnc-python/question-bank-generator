@@ -15,9 +15,6 @@ def generate_question_bank(
     Generates a calibrated question bank bounded strictly by the syllabus and
     matching the PYQ difficulty and style profile.
     """
-    if not api_key:
-        raise ValueError("Gemini API Key is missing. Please provide a valid key in the sidebar.")
-
     client = genai.Client(api_key=api_key.strip())
     
     prompt = f"""
@@ -61,8 +58,10 @@ def generate_question_bank(
     Generate EXACTLY {num_questions} questions now.
     """
     
-    response = None
-    for model_name in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash"]
+    last_error = None
+    
+    for model_name in models_to_try:
         try:
             response = client.models.generate_content(
                 model=model_name,
@@ -72,26 +71,10 @@ def generate_question_bank(
                     temperature=0.3
                 )
             )
-            break
+            questions = json.loads(response.text)
+            return questions
         except Exception as e:
-            if model_name == "gemini-1.5-flash":
-                raise e
-    
-    try:
-        questions = json.loads(response.text)
-        return questions
-    except Exception as e:
-        return [
-            {
-                "question_id": 1,
-                "chapter": "Sample Chapter",
-                "topic": "Sample Topic",
-                "question_type": "MCQ",
-                "difficulty": "Medium",
-                "question": "Sample Question (Generation parsing retry recommended)",
-                "options": {"A": "Choice 1", "B": "Choice 2", "C": "Choice 3", "D": "Choice 4"},
-                "correct_answer": "A",
-                "explanation": "Sample explanation.",
-                "syllabus_ref": "Sample Ref"
-            }
-        ]
+            last_error = e
+            continue
+            
+    raise RuntimeError(f"Failed to generate questions via Gemini API: {str(last_error)}")
